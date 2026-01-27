@@ -24,6 +24,7 @@ from telemetry.models import format_laptime
 from analysis.segmenter import CornerSegmenter, get_track_corners
 from analysis.comparator import LapComparator
 from analysis.metrics import MetricsCalculator, format_laptime_ms
+from dashboard.track_animation import TrackAnimator, get_track_config, create_lap_comparison_animation
 
 
 # Page config
@@ -123,7 +124,7 @@ def main():
             return
     
     # Main content
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "📈 Telemetry", "🔄 Comparison", "🎯 Analysis"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "📈 Telemetry", "🔄 Comparison", "🎯 Analysis", "🗺️ Track Guide"])
     
     with tab1:
         show_overview(session_info, laps, telemetry)
@@ -147,6 +148,14 @@ def main():
         lap_telemetry = loader.get_lap_telemetry(selected_lap)
         if lap_telemetry is not None:
             show_analysis(lap_telemetry, session_info['track'])
+    
+    with tab5:
+        lap_telemetry = loader.get_lap_telemetry(selected_lap)
+        ref_telemetry = loader.get_lap_telemetry(reference_lap)
+        if lap_telemetry is not None:
+            show_track_guide(lap_telemetry, ref_telemetry, session_info['track'], selected_lap, reference_lap)
+        else:
+            st.warning("No telemetry data for track guide")
     
     loader.close()
 
@@ -586,6 +595,141 @@ def show_analysis(telemetry: pd.DataFrame, track_name: str):
         st.write("**Throttle Application**")
         st.write(f"- Avg throttle on straights: {metrics.inputs.avg_throttle_on_straights*100:.1f}%")
         st.write(f"- Throttle lifts: {metrics.inputs.throttle_lift_count}")
+
+
+def show_track_guide(lap1: pd.DataFrame, lap2: pd.DataFrame, 
+                     track_name: str, lap1_num: int, lap2_num: int):
+    """Show animated track guide with racing lines"""
+    st.header("Track Guide")
+    
+    # Get track config
+    track_config = get_track_config(track_name)
+    animator = TrackAnimator(track_config)
+    
+    st.markdown(f"**Track:** {track_config.display_name}")
+    
+    # View options
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        view_mode = st.selectbox(
+            "View Mode",
+            ["Static Racing Line", "Animated Comparison", "Corner Zoom"]
+        )
+    
+    with col2:
+        color_by = st.selectbox(
+            "Color By",
+            ["speed", "throttle", "brake"]
+        )
+    
+    with col3:
+        if view_mode == "Animated Comparison":
+            animation_speed = st.slider("Animation Duration (s)", 5, 30, 15)
+    
+    st.markdown("---")
+    
+    if view_mode == "Static Racing Line":
+        st.subheader("Racing Line Comparison")
+        st.markdown(f"**Your Lap {lap1_num}** vs **Reference Lap {lap2_num}**")
+        
+        # Create static comparison
+        fig = animator.create_static_comparison(lap1, lap2, color_by=color_by)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Legend
+        st.markdown("""
+        **How to read this:**
+        - **Colored line**: Your racing line (color = speed/throttle/brake)
+        - **Dashed green line**: Reference/ideal line
+        - Compare where your line diverges from the reference
+        """)
+        
+    elif view_mode == "Animated Comparison":
+        st.subheader("Ghost Comparison Animation")
+        st.markdown(f"🔴 **Your Lap {lap1_num}** racing against 🟢 **Reference Lap {lap2_num}**")
+        
+        # Create animation
+        fig = animator.create_animation(lap1, lap2, duration_seconds=animation_speed)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("""
+        **Controls:**
+        - Click **Play** to start the animation
+        - Use the **slider** to scrub through the lap
+        - Watch where the dots separate - that's where time is gained/lost
+        """)
+        
+    elif view_mode == "Corner Zoom":
+        st.subheader("Corner Detail View")
+        
+        # Corner selection
+        corners = track_config.corners
+        if corners:
+            corner_names = [c['name'] for c in corners]
+            selected_corner = st.selectbox("Select Corner", corner_names)
+            
+            # Find corner position
+            corner_idx = corner_names.index(selected_corner)
+            corner_pos = corners[corner_idx].get('x', 0.5)
+        else:
+            corner_pos = st.slider("Track Position", 0.0, 1.0, 0.5)
+            selected_corner = f"Position {corner_pos:.0%}"
+        
+        # Zoom window
+        zoom_window = st.slider("Zoom Level", 0.02, 0.15, 0.05)
+        
+        st.markdown(f"**Analyzing: {selected_corner}**")
+        
+        # Create corner zoom
+        fig = animator.create_corner_zoom(lap1, corner_pos, zoom_window, lap2)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Corner tips
+        st.markdown("""
+        **Corner Analysis Tips:**
+        - **Entry**: Where you start turning in
+        - **Apex**: The innermost point (marked with ⭐)
+        - **Exit**: Where you unwind the steering
+        - Compare your line (colored) to the ideal (dashed green)
+        """)
+    
+    # Track-specific tips
+    st.markdown("---")
+    st.subheader("Track Tips")
+    
+    track_tips = {
+        "monza": [
+            "**T1 (Variante del Rettifilo)**: Late apex, use all the exit kerb",
+            "**Lesmos**: Patience! Don't rush the entry, focus on exit speed",
+            "**Ascari**: One flowing movement, don't over-slow",
+            "**Parabolica**: Early turn-in, progressive throttle, use all the track on exit",
+        ],
+        "spa": [
+            "**La Source**: Tight hairpin, focus on exit for Eau Rouge",
+            "**Eau Rouge/Raidillon**: Flat in GT3 with good setup, commit!",
+            "**Pouhon**: Double apex, carry speed through",
+            "**Bus Stop**: Heavy braking, nail the chicane for good exit onto pit straight",
+        ],
+        "nurburgring": [
+            "**T1**: Hard braking, tight apex",
+            "**Mercedes Arena**: Flow through, don't over-slow",
+            "**Schumacher S**: Rhythm section, smooth inputs",
+        ],
+    }
+    
+    track_lower = track_name.lower()
+    tips = None
+    for key, value in track_tips.items():
+        if key in track_lower:
+            tips = value
+            break
+    
+    if tips:
+        for tip in tips:
+            st.markdown(f"- {tip}")
+    else:
+        st.info("No specific tips available for this track yet.")
 
 
 def show_demo_dashboard():

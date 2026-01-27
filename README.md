@@ -185,7 +185,15 @@ ACC Game → Shared Memory → Collector → Recorder → Parquet/SQLite
 
 ## License
 
-MIT License - feel free to use, modify, and share!
+This project is licensed under the **Business Source License 1.1** (BSL).
+
+**What this means:**
+- **Personal/non-commercial use**: Allowed
+- **Education and research**: Allowed  
+- **Commercial use**: Requires a separate license - contact the author
+- **After 4 years**: Converts to Apache 2.0 (fully open source)
+
+See [LICENSE](LICENSE) for full details.
 
 ## Acknowledgments
 
