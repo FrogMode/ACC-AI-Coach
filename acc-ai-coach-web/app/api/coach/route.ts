@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
 export async function POST(request: NextRequest) {
@@ -34,17 +34,18 @@ ${carName ? `Car: ${carName}` : ''}
 
 ${prompt}`
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 500,
+      system: systemPrompt,
       messages: [
-        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.7,
-      max_tokens: 500,
     })
 
-    const response = completion.choices[0]?.message?.content || 'Unable to generate coaching feedback.'
+    const response = message.content[0].type === 'text' 
+      ? message.content[0].text 
+      : 'Unable to generate coaching feedback.'
 
     return NextResponse.json({ feedback: response })
   } catch (error) {

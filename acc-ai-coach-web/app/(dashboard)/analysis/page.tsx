@@ -78,7 +78,7 @@ Provide specific tips to improve.`,
       }
     } catch (error) {
       console.error('Coaching error:', error)
-      setCoachingFeedback('Error connecting to coaching service. Make sure OPENAI_API_KEY is configured.')
+      setCoachingFeedback('Error connecting to coaching service. Make sure ANTHROPIC_API_KEY is configured.')
     } finally {
       setIsLoadingCoaching(false)
     }
